@@ -1,30 +1,29 @@
 package com.statelesscoder
 
-import com.google.auth.oauth2.ServiceAccountCredentials
-import com.google.cloud.translate.Translate
-import com.google.cloud.translate.TranslateOptions
-import org.apache.commons.lang3.StringEscapeUtils
-import java.io.FileInputStream
+import kotlinx.coroutines.runBlocking
 
 val desiredModel = "Basic (and reversed card)"
 
-
 fun main() {
-//    val metroNews = MetroNewsSource()
-//    val articles = metroNews.getCurrentDescriptions()
-//        .map { cleanBody(it) }
-//    println(articles.first())
-    val translate = TranslateOptions
-        .newBuilder()
-        .setCredentials(ServiceAccountCredentials.fromStream(FileInputStream("C:\\Users\\john\\projects\\articletoanki\\key.json")))
-        .setTargetLanguage("en")
-        .build()
-        .service
+    val translator = Translator(System.getProperty("google.api.key"),
+        TranslatorLanguages.Nederlands,
+        TranslatorLanguages.English)
+    val feed = MetroNewsSource()
+    val ankiApi = AnkiApi("http", "localhost", 8765)
 
-    val result = translate.translate("Hij doet 't wel.", Translate.TranslateOption.sourceLanguage("nl"))
-    val decoded = StringEscapeUtils.unescapeHtml4(result.translatedText)
-    println(decoded)
+    val sentences = feed.getCurrentDescriptions()
+        .flatMap { cleanBody(it) }
+        .map { Pair(it, translator.translate(it)) }
 
+    runBlocking {
+        val newDeck = ankiApi.createDeck("Metro Nieuws Deck")
+        val model = ankiApi.modelNamesAndIds().first { it.name == desiredModel }
+
+        sentences
+            .map { NoteFields(it.first, it.second) }
+            .map { Note(newDeck, model, it) }
+            .forEach { ankiApi.addNote(it)}
+    }
 }
 
 fun cleanBody(description: String): List<String> {

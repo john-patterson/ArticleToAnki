@@ -13,6 +13,13 @@ repositories {
     jcenter()
 }
 
+def Properties properties = new Properties()
+properties.load(project.rootProject.file("local.properties").newDataInputStream())
+
+run {
+    systemProperty 'google.api.key', properties.getProperty("GOOGLE_API_KEY")
+}
+
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib"
     compile "io.ktor:ktor-client-core:1.4.0"

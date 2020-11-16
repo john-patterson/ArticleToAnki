@@ -7,15 +7,6 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.features.json.*
 import io.ktor.client.request.*
 import io.ktor.http.*
-import io.ktor.util.*
-import com.google.*
-import kotlin.reflect.typeOf
-
-val client = HttpClient(CIO) {
-    install(JsonFeature) {
-        serializer = GsonSerializer()
-    }
-}
 
 data class AnkiRequest<T>(@SerializedName("action") val action: String,
                        @SerializedName("params") val params: Map<String, T> = emptyMap()) {
@@ -41,45 +32,52 @@ data class Note(val deck: Deck,
 }
 
 
-suspend fun addNote(note: Note): Double {
-    val result = client.post<String>(scheme = "http", "localhost", port = 8765) {
-        contentType(ContentType.Application.Json)
-        body = AnkiRequest("addNote", mapOf(Pair("note", note)))
+
+
+class AnkiApi(private val scheme: String, private val hostName: String, private val port: Int) {
+    private val client = HttpClient(CIO) {
+        install(JsonFeature) {
+            serializer = GsonSerializer()
+        }
     }
 
-    val parsed = Gson().fromJson<AnkiWebResult<Double>>(result, AnkiWebResult::class.java)
-    return parsed.result
+    private suspend fun <T, K> get(requestBody: AnkiRequest<K>): AnkiWebResult<T> {
+        val result = this.client.get<String>(this.scheme, this.hostName, this.port) {
+            contentType(ContentType.Application.Json)
+            body = requestBody
+        }
 
-}
-
-suspend fun modelNamesAndIds(): List<Model> {
-    val result = client.get<String>(scheme = "http", host = "localhost", port = 8765) {
-        contentType(ContentType.Application.Json)
-        body = AnkiRequest<String>("modelNamesAndIds")
+        return Gson().fromJson<AnkiWebResult<T>>(result, AnkiWebResult::class.java)
     }
 
-    val parsed = Gson().fromJson<AnkiWebResult<Map<String, Double>>>(result, AnkiWebResult::class.java)
-    return parsed.result.entries
-        .map { Model(it.key, it.value) }
-}
+    private suspend fun <T, K> post(requestBody: AnkiRequest<K>): AnkiWebResult<T> {
+        val result = this.client.post<String>(this.scheme, this.hostName, this.port) {
+            contentType(ContentType.Application.Json)
+            body = requestBody
+        }
 
-suspend fun createDeck(name: String): Deck {
-    val result = client.post<String>(scheme = "http", "localhost", port = 8765) {
-        contentType(ContentType.Application.Json)
-        body = AnkiRequest("createDeck", mapOf(Pair("deck", name)))
+        return Gson().fromJson<AnkiWebResult<T>>(result, AnkiWebResult::class.java)
     }
 
-    val parsed = Gson().fromJson<AnkiWebResult<Double>>(result, AnkiWebResult::class.java)
-    return Deck(name, parsed.result)
-}
-
-suspend fun deckNamesAndIds(): List<Deck>  {
-    val result = client.get<String>(scheme = "http", host = "localhost", port = 8765) {
-        contentType(ContentType.Application.Json)
-        body = AnkiRequest<String>("deckNamesAndIds")
+    suspend fun addNote(note: Note): Double {
+        val response: AnkiWebResult<Double> = post(AnkiRequest("addNote", mapOf(Pair("note", note))))
+        return response.result
     }
 
-    val parsed = Gson().fromJson<AnkiWebResult<Map<String, Double>>>(result, AnkiWebResult::class.java)
-    return parsed.result.entries
-        .map { Deck(it.key, it.value) }
+    suspend fun modelNamesAndIds(): List<Model> {
+        val response: AnkiWebResult<Map<String, Double>> = get(AnkiRequest<String>("modelNamesAndIds"))
+        return response.result.entries
+            .map { Model(it.key, it.value) }
+    }
+
+    suspend fun createDeck(name: String): Deck {
+        val response: AnkiWebResult<Double> = post(AnkiRequest("createDeck", mapOf(Pair("deck", name))))
+        return Deck(name, response.result)
+    }
+
+    suspend fun deckNamesAndIds(): List<Deck>  {
+        val response: AnkiWebResult<Map<String, Double>> = get(AnkiRequest<String>("deckNamesAndIds"))
+        return response.result.entries
+            .map { Deck(it.key, it.value) }
+    }
 }
